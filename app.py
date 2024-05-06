@@ -3,8 +3,10 @@ import requests
 import os
 from dotenv import load_dotenv
 import groq
+import logging
 import re
 from datetime import datetime
+import time
 
 load_dotenv()
 
@@ -49,13 +51,20 @@ def generate_weather_description(data, groq_api_key):
         return f"Error: {str(e)}"
 
 
-def get_weekly_forecast(weather_api_key,lat,lon):
-    base_url="http://api.openweathermap.org/data/2.5/weather?" 
-    weekly_forecast_complete_url=f"{base_url}forecast?lat={lat}&lon={lon}&appid={weather_api_key}"
-    weekly_forecast_response=requests.get(weekly_forecast_complete_url)
-
-       
-    return weekly_forecast_response.json()
+def get_weekly_forecast(weather_api_key, lat, lon):
+    base_url = "https://api.openweathermap.org/data/2.5/forecast?"
+    weekly_forecast_complete_url = f"{base_url}lat={lat}&lon={lon}&appid={weather_api_key}"
+    
+    weekly_forecast_response = requests.get(weekly_forecast_complete_url)
+    
+    if weekly_forecast_response.status_code != 200:
+        raise Exception(f"Error fetching weekly forecast: {weekly_forecast_response.status_code}")
+    
+    try:
+        return weekly_forecast_response.json()
+    except ValueError:
+        raise Exception("Error parsing JSON response")
+    
 
 def display_weekly_forecast(data):
     try:
@@ -65,19 +74,27 @@ def display_weekly_forecast(data):
 
         c1,c2,c3,c4=st.columns(4)
         with c1:
-            st.metric("","Day")
+            st.metric(" ","Day")
         with c2:
-            st.metric("","Desc")
+            st.metric(" ","Desc")
         with c3:
-            st.metric("","Min_temp")
+            st.metric(" ","Min_temp")
         with c4:
-            st.metric("","Max_temp")
+            st.metric(" ","Max_temp")
 
-        for day in data:
+        for day in data['list']:          
+
+            #Convert the timestamp to date
             date=datetime.fromtimestamp(day['dt']).strftime('%A, %B %d')
+            
+            print(date)
+
+            print("should be looking searching through the data")
             #Ccheck if the date has already been displayed
             if date not in display_dates:
                 display_dates.add(date)
+
+              
 
                 min_temp=day['main']['temp_min']-273.15 #conver Kelvin to Celsius
                 max_temp=day['main']['temp_max']-273.15
@@ -93,7 +110,7 @@ def display_weekly_forecast(data):
                     st.write(f"{max_temp:.1f}°C")
 
     except Exception as e:
-        st.error("Error in displaying weekly forecast"+ str(e))
+        st.error("Error in displaying weekly forecast "+ str(e))
 
 
 #Funtion to normalize the city name
@@ -122,10 +139,13 @@ def weather_tool():
         with st.spinner('Fetching Weather data ...'):
             weather_data = get_weather_data(city, weather_api_key)
 
+            print(weather_data)
             
-
+        
             # Check if the city is found and display weather data
             if weather_data.get("cod") != 404:
+
+                print("in the weather data if statement ")
                 col1, col2 = st.columns(2)
                 with col1:
                     st.metric("Temperature", f"{weather_data['main']['temp'] - 273.15:.2f}°C")
@@ -138,20 +158,25 @@ def weather_tool():
                 lon= weather_data['coord']['lon']
 
 
+               
 
                 # Generate and display a friendly weather description
                 weather_description = generate_weather_description(weather_data, groq_api_key)
                 st.write(weather_description)
 
-                #Call Funtion to get the weekly forecast
-                forecast_data= get_weekly_forecast(weather_api_key,lat,lon)
                 
-                print(forecast_data)
+                print("lat is ", lat)
+                print("lon is ", lon)
+                
+                #Call Funtion to get the weekly forecast
+                forecast_data= get_weekly_forecast(weather_api_key,lat,lon)          
+                
 
-                print(forecast_data)#This is the just to check what the data looks like
+                if forecast_data.get("cod") != 404:
 
-                if forecast_data.get('cod')!='404':
+                    
                     display_weekly_forecast(forecast_data)
+                    
                 else:
                     st.error("Error fetching weekly forecast data!")
 
